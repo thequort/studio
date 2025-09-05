@@ -22,7 +22,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
@@ -49,9 +48,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import { orders as initialOrders } from '@/lib/orders';
-import { products as initialProducts } from '@/lib/products';
-import { Pencil, PlusCircle, Trash2 } from '@/components/icons';
-import { useState } from 'react';
+import { Pencil, PlusCircle, Trash2, Loader2 } from '@/components/icons';
+import { useState, useEffect } from 'react';
 import type { Product, Order } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { ShoppingBag, Users, MoreHorizontal } from 'lucide-react';
@@ -62,6 +60,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { db } from '@/lib/firebase';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+
 
 const revenueData = [
   { name: 'Jan', total: Math.floor(Math.random() * 5000) + 1000 },
@@ -88,7 +89,7 @@ const emptyProduct: Omit<Product, 'id' | 'specifications'> & { images: string } 
 };
 
 export function AdminDashboard() {
-  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>(initialOrders);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
@@ -96,7 +97,30 @@ export function AdminDashboard() {
   const [newProduct, setNewProduct] = useState(emptyProduct);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
   const [orderToDelete, setOrderToDelete] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+
+  const fetchProducts = async () => {
+    setIsLoading(true);
+    try {
+      const querySnapshot = await getDocs(collection(db, "products"));
+      const productsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+      setProducts(productsData);
+    } catch (error) {
+      console.error("Error fetching products: ", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Could not fetch products from the database.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
 
   const totalRevenue = orders.reduce((acc, order) => acc + order.total, 0);
   const totalOrders = orders.length;
@@ -106,14 +130,28 @@ export function AdminDashboard() {
     setEditingProduct({ ...product });
   };
 
-  const handleSaveProduct = () => {
+  const handleSaveProduct = async () => {
     if (!editingProduct) return;
-    setProducts(products.map(p => p.id === editingProduct.id ? editingProduct : p));
-    toast({
-        title: "Product Updated",
-        description: `${editingProduct.name} has been successfully updated.`,
-    });
-    setEditingProduct(null);
+    setIsLoading(true);
+    try {
+      const productRef = doc(db, "products", editingProduct.id);
+      await updateDoc(productRef, { ...editingProduct });
+      await fetchProducts(); // Refetch products to show updated data
+      toast({
+          title: "Product Updated",
+          description: `${editingProduct.name} has been successfully updated.`,
+      });
+      setEditingProduct(null);
+    } catch (error) {
+       console.error("Error updating product: ", error);
+       toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Could not update the product.",
+      });
+    } finally {
+        setIsLoading(false);
+    }
   };
   
   const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -133,32 +171,57 @@ export function AdminDashboard() {
     });
   };
 
-  const handleAddNewProduct = () => {
-    const newProductData: Product = {
-      ...newProduct,
-      id: `prod-${Date.now()}`,
-      images: newProduct.images.split(',').map(url => url.trim()).filter(url => url),
-      price: Number(newProduct.price),
-      stock: Number(newProduct.stock),
-      specifications: {}, // Simplified for now
-    };
-    setProducts([newProductData, ...products]);
-    toast({
-        title: "Product Added",
-        description: `${newProductData.name} has been successfully added.`,
-    });
-    setIsNewProductDialogOpen(false);
-    setNewProduct(emptyProduct);
+  const handleAddNewProduct = async () => {
+    setIsLoading(true);
+    try {
+      const newProductData: Omit<Product, 'id'> = {
+        ...newProduct,
+        images: newProduct.images.split(',').map(url => url.trim()).filter(url => url),
+        price: Number(newProduct.price),
+        stock: Number(newProduct.stock),
+        specifications: {}, // Simplified for now
+      };
+      const docRef = await addDoc(collection(db, "products"), newProductData);
+      setProducts([{ id: docRef.id, ...newProductData }, ...products]);
+      toast({
+          title: "Product Added",
+          description: `${newProduct.name} has been successfully added.`,
+      });
+      setIsNewProductDialogOpen(false);
+      setNewProduct(emptyProduct);
+    } catch (error) {
+      console.error("Error adding product: ", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Could not add the new product.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
   
-  const handleDeleteProduct = () => {
+  const handleDeleteProduct = async () => {
     if (!productToDelete) return;
-    setProducts(products.filter(p => p.id !== productToDelete));
-    toast({
-        title: "Product Deleted",
-        description: "The product has been successfully deleted.",
-    });
-    setProductToDelete(null);
+    setIsLoading(true);
+    try {
+        await deleteDoc(doc(db, "products", productToDelete));
+        await fetchProducts(); // Refetch
+        toast({
+            title: "Product Deleted",
+            description: "The product has been successfully deleted.",
+        });
+        setProductToDelete(null);
+    } catch (error) {
+        console.error("Error deleting product: ", error);
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Could not delete the product.",
+        });
+    } finally {
+        setIsLoading(false);
+    }
   };
   
   const handleEditOrder = (order: Order) => {
@@ -301,7 +364,8 @@ export function AdminDashboard() {
           </CardHeader>
           <CardContent>
              <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
-                {products.map(product => (
+                {isLoading && products.length === 0 ? (<div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>) : 
+                products.map(product => (
                     <div key={product.id} className="flex items-center">
                         <div className="flex-1 space-y-1">
                             <p className="text-sm font-medium leading-none">{product.name}</p>
@@ -364,26 +428,29 @@ export function AdminDashboard() {
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="name" className="text-right">Name</Label>
-                            <Input id="name" name="name" value={editingProduct.name} onChange={handleEditFormChange} className="col-span-3" />
+                            <Input id="name" name="name" value={editingProduct.name} onChange={handleEditFormChange} className="col-span-3" disabled={isLoading}/>
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="price" className="text-right">Price</Label>
-                            <Input id="price" name="price" type="number" value={editingProduct.price} onChange={handleEditFormChange} className="col-span-3" />
+                            <Input id="price" name="price" type="number" value={editingProduct.price} onChange={handleEditFormChange} className="col-span-3" disabled={isLoading}/>
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="stock" className="text-right">Stock</Label>
-                            <Input id="stock" name="stock" type="number" value={editingProduct.stock} onChange={handleEditFormChange} className="col-span-3" />
+                            <Input id="stock" name="stock" type="number" value={editingProduct.stock} onChange={handleEditFormChange} className="col-span-3" disabled={isLoading}/>
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="description" className="text-right">Description</Label>
-                            <Textarea id="description" name="description" value={editingProduct.description} onChange={handleEditFormChange} className="col-span-3" />
+                            <Textarea id="description" name="description" value={editingProduct.description} onChange={handleEditFormChange} className="col-span-3" disabled={isLoading}/>
                         </div>
                     </div>
                     <DialogFooter>
                         <DialogClose asChild>
-                            <Button variant="outline">Cancel</Button>
+                            <Button variant="outline" disabled={isLoading}>Cancel</Button>
                         </DialogClose>
-                        <Button onClick={handleSaveProduct}>Save Changes</Button>
+                        <Button onClick={handleSaveProduct} disabled={isLoading}>
+                           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                           Save Changes
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -397,30 +464,33 @@ export function AdminDashboard() {
                 <div className="grid gap-4 py-4">
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="newName" className="text-right">Name</Label>
-                        <Input id="newName" name="name" value={newProduct.name} onChange={handleNewFormChange} className="col-span-3" />
+                        <Input id="newName" name="name" value={newProduct.name} onChange={handleNewFormChange} className="col-span-3" disabled={isLoading} />
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="newPrice" className="text-right">Price</Label>
-                        <Input id="newPrice" name="price" type="number" value={newProduct.price} onChange={handleNewFormChange} className="col-span-3" />
+                        <Input id="newPrice" name="price" type="number" value={newProduct.price} onChange={handleNewFormChange} className="col-span-3" disabled={isLoading}/>
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="newStock" className="text-right">Stock</Label>
-                        <Input id="newStock" name="stock" type="number" value={newProduct.stock} onChange={handleNewFormChange} className="col-span-3" />
+                        <Input id="newStock" name="stock" type="number" value={newProduct.stock} onChange={handleNewFormChange} className="col-span-3" disabled={isLoading}/>
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="newDescription" className="text-right">Description</Label>
-                        <Textarea id="newDescription" name="description" value={newProduct.description} onChange={handleNewFormChange} className="col-span-3" />
+                        <Textarea id="newDescription" name="description" value={newProduct.description} onChange={handleNewFormChange} className="col-span-3" disabled={isLoading}/>
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="newImages" className="text-right">Image URLs</Label>
-                        <Input id="newImages" name="images" value={newProduct.images} onChange={handleNewFormChange} className="col-span-3" placeholder="Comma-separated URLs" />
+                        <Input id="newImages" name="images" value={newProduct.images} onChange={handleNewFormChange} className="col-span-3" placeholder="Comma-separated URLs" disabled={isLoading}/>
                     </div>
                 </div>
                 <DialogFooter>
                     <DialogClose asChild>
-                        <Button variant="outline">Cancel</Button>
+                        <Button variant="outline" disabled={isLoading}>Cancel</Button>
                     </DialogClose>
-                    <Button onClick={handleAddNewProduct}>Add Product</Button>
+                    <Button onClick={handleAddNewProduct} disabled={isLoading}>
+                      {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Add Product
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -474,7 +544,10 @@ export function AdminDashboard() {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDeleteProduct}>Delete</AlertDialogAction>
+                    <AlertDialogAction onClick={handleDeleteProduct} disabled={isLoading}>
+                      {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Delete
+                    </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
