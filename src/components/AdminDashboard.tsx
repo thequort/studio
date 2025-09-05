@@ -33,10 +33,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import { orders as initialOrders } from '@/lib/orders';
 import { products as initialProducts } from '@/lib/products';
-import { LayoutDashboard, ShoppingBag, Users, Pencil } from '@/components/icons';
+import { Pencil, PlusCircle } from '@/components/icons';
 import { useState } from 'react';
 import type { Product } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+import { ShoppingBag, Users } from 'lucide-react';
 
 const revenueData = [
   { name: 'Jan', total: Math.floor(Math.random() * 5000) + 1000 },
@@ -53,10 +54,21 @@ const revenueData = [
   { name: 'Dec', total: Math.floor(Math.random() * 5000) + 1000 },
 ];
 
+const emptyProduct: Omit<Product, 'id' | 'specifications'> & { images: string } = {
+  name: '',
+  category: 'Clothing',
+  price: 0,
+  description: '',
+  images: '',
+  stock: 0,
+};
+
 export function AdminDashboard() {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [orders, setOrders] = useState(initialOrders);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isNewProductDialogOpen, setIsNewProductDialogOpen] = useState(false);
+  const [newProduct, setNewProduct] = useState(emptyProduct);
   const { toast } = useToast();
 
   const totalRevenue = orders.reduce((acc, order) => acc + order.total, 0);
@@ -84,6 +96,32 @@ export function AdminDashboard() {
         ...editingProduct,
         [name]: name === 'price' || name === 'stock' ? Number(value) : value,
     });
+  };
+
+  const handleNewFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setNewProduct({
+        ...newProduct,
+        [name]: name === 'price' || name === 'stock' ? Number(value) : value,
+    });
+  };
+
+  const handleAddNewProduct = () => {
+    const newProductData: Product = {
+      ...newProduct,
+      id: `prod-${Date.now()}`,
+      images: newProduct.images.split(',').map(url => url.trim()).filter(url => url),
+      price: Number(newProduct.price),
+      stock: Number(newProduct.stock),
+      specifications: {}, // Simplified for now
+    };
+    setProducts([newProductData, ...products]);
+    toast({
+        title: "Product Added",
+        description: `${newProductData.name} has been successfully added.`,
+    });
+    setIsNewProductDialogOpen(false);
+    setNewProduct(emptyProduct);
   };
 
 
@@ -169,9 +207,15 @@ export function AdminDashboard() {
         </Card>
 
         <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className='font-headline'>Product Inventory</CardTitle>
-            <CardDescription>Current stock levels for all products.</CardDescription>
+          <CardHeader className="flex justify-between items-center">
+            <div>
+              <CardTitle className='font-headline'>Product Inventory</CardTitle>
+              <CardDescription>Current stock levels for all products.</CardDescription>
+            </div>
+             <Button size="sm" onClick={() => setIsNewProductDialogOpen(true)}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Add New
+            </Button>
           </CardHeader>
           <CardContent>
              <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
@@ -259,6 +303,42 @@ export function AdminDashboard() {
                 </DialogContent>
             </Dialog>
         )}
+
+        <Dialog open={isNewProductDialogOpen} onOpenChange={setIsNewProductDialogOpen}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Add New Product</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="newName" className="text-right">Name</Label>
+                        <Input id="newName" name="name" value={newProduct.name} onChange={handleNewFormChange} className="col-span-3" />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="newPrice" className="text-right">Price</Label>
+                        <Input id="newPrice" name="price" type="number" value={newProduct.price} onChange={handleNewFormChange} className="col-span-3" />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="newStock" className="text-right">Stock</Label>
+                        <Input id="newStock" name="stock" type="number" value={newProduct.stock} onChange={handleNewFormChange} className="col-span-3" />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="newDescription" className="text-right">Description</Label>
+                        <Textarea id="newDescription" name="description" value={newProduct.description} onChange={handleNewFormChange} className="col-span-3" />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="newImages" className="text-right">Image URLs</Label>
+                        <Input id="newImages" name="images" value={newProduct.images} onChange={handleNewFormChange} className="col-span-3" placeholder="Comma-separated URLs" />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button variant="outline">Cancel</Button>
+                    </DialogClose>
+                    <Button onClick={handleAddNewProduct}>Add Product</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
   );
 }
