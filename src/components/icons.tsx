@@ -15,6 +15,7 @@ export {
   Users,
   Pencil,
   PlusCircle,
+  MoreHorizontal,
 } from 'lucide-react';
 
 export const TeQourtLogo = (props: SVGProps<SVGSVGElement>) => (

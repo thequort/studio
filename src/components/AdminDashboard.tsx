@@ -26,6 +26,23 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,11 +50,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import { orders as initialOrders } from '@/lib/orders';
 import { products as initialProducts } from '@/lib/products';
-import { Pencil, PlusCircle } from '@/components/icons';
+import { Pencil, PlusCircle, Trash2 } from '@/components/icons';
 import { useState } from 'react';
-import type { Product } from '@/lib/types';
+import type { Product, Order } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { ShoppingBag, Users } from 'lucide-react';
+import { ShoppingBag, Users, MoreHorizontal } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const revenueData = [
   { name: 'Jan', total: Math.floor(Math.random() * 5000) + 1000 },
@@ -65,10 +89,13 @@ const emptyProduct: Omit<Product, 'id' | 'specifications'> & { images: string } 
 
 export function AdminDashboard() {
   const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [orders, setOrders] = useState(initialOrders);
+  const [orders, setOrders] = useState<Order[]>(initialOrders);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [isNewProductDialogOpen, setIsNewProductDialogOpen] = useState(false);
   const [newProduct, setNewProduct] = useState(emptyProduct);
+  const [productToDelete, setProductToDelete] = useState<string | null>(null);
+  const [orderToDelete, setOrderToDelete] = useState<string | null>(null);
   const { toast } = useToast();
 
   const totalRevenue = orders.reduce((acc, order) => acc + order.total, 0);
@@ -123,6 +150,45 @@ export function AdminDashboard() {
     setIsNewProductDialogOpen(false);
     setNewProduct(emptyProduct);
   };
+  
+  const handleDeleteProduct = () => {
+    if (!productToDelete) return;
+    setProducts(products.filter(p => p.id !== productToDelete));
+    toast({
+        title: "Product Deleted",
+        description: "The product has been successfully deleted.",
+    });
+    setProductToDelete(null);
+  };
+  
+  const handleEditOrder = (order: Order) => {
+    setEditingOrder({ ...order });
+  };
+  
+  const handleSaveOrder = () => {
+    if (!editingOrder) return;
+    setOrders(orders.map(o => o.id === editingOrder.id ? editingOrder : o));
+    toast({
+        title: "Order Updated",
+        description: `Order ${editingOrder.id} has been successfully updated.`,
+    });
+    setEditingOrder(null);
+  };
+
+  const handleOrderStatusChange = (status: 'Pending' | 'Shipped' | 'Delivered') => {
+    if (!editingOrder) return;
+    setEditingOrder({...editingOrder, status});
+  };
+
+  const handleDeleteOrder = () => {
+    if (!orderToDelete) return;
+    setOrders(orders.filter(o => o.id !== orderToDelete));
+    toast({
+        title: "Order Deleted",
+        description: "The order has been successfully deleted.",
+    });
+    setOrderToDelete(null);
+  };
 
 
   return (
@@ -175,6 +241,7 @@ export function AdminDashboard() {
                   <TableHead>Customer</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -198,6 +265,21 @@ export function AdminDashboard() {
                     </TableCell>
                     <TableCell className="text-right">
                       ${order.total.toFixed(2)}
+                    </TableCell>
+                     <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button aria-haspopup="true" size="icon" variant="ghost">
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Toggle menu</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuItem onSelect={() => handleEditOrder(order)}>Edit</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setOrderToDelete(order.id)}>Delete</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -227,6 +309,9 @@ export function AdminDashboard() {
                         </div>
                         <Button variant="ghost" size="icon" onClick={() => handleEditProduct(product)}>
                             <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => setProductToDelete(product.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                     </div>
                 ))}
@@ -339,6 +424,75 @@ export function AdminDashboard() {
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+
+        {editingOrder && (
+            <Dialog open={!!editingOrder} onOpenChange={(isOpen) => !isOpen && setEditingOrder(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Order {editingOrder.id}</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="orderStatus" className="text-right">Status</Label>
+                            <Select value={editingOrder.status} onValueChange={handleOrderStatusChange}>
+                                <SelectTrigger className="col-span-3">
+                                    <SelectValue placeholder="Select status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Pending">Pending</SelectItem>
+                                    <SelectItem value="Shipped">Shipped</SelectItem>
+                                    <SelectItem value="Delivered">Delivered</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">Customer</Label>
+                            <p className="col-span-3 text-sm">{editingOrder.customerName}</p>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">Total</Label>
+                            <p className="col-span-3 text-sm">${editingOrder.total.toFixed(2)}</p>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button variant="outline">Cancel</Button>
+                        </DialogClose>
+                        <Button onClick={handleSaveOrder}>Save Changes</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        )}
+        
+        <AlertDialog open={!!productToDelete} onOpenChange={(isOpen) => !isOpen && setProductToDelete(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete the product.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteProduct}>Delete</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={!!orderToDelete} onOpenChange={(isOpen) => !isOpen && setOrderToDelete(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete the order.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteOrder}>Delete</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     </div>
   );
 }
