@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -17,16 +18,25 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import {
-  Bar,
-  BarChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-  Tooltip,
-} from 'recharts';
-import { orders } from '@/lib/orders';
-import { products } from '@/lib/products';
-import { LayoutDashboard, ShoppingBag, Users } from './icons';
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
+import { orders as initialOrders } from '@/lib/orders';
+import { products as initialProducts } from '@/lib/products';
+import { LayoutDashboard, ShoppingBag, Users, Pencil } from '@/components/icons';
+import { useState } from 'react';
+import type { Product } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
 
 const revenueData = [
   { name: 'Jan', total: Math.floor(Math.random() * 5000) + 1000 },
@@ -44,9 +54,38 @@ const revenueData = [
 ];
 
 export function AdminDashboard() {
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [orders, setOrders] = useState(initialOrders);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const { toast } = useToast();
+
   const totalRevenue = orders.reduce((acc, order) => acc + order.total, 0);
   const totalOrders = orders.length;
   const totalCustomers = new Set(orders.map((o) => o.email)).size;
+
+  const handleEditProduct = (product: Product) => {
+    setEditingProduct({ ...product });
+  };
+
+  const handleSaveProduct = () => {
+    if (!editingProduct) return;
+    setProducts(products.map(p => p.id === editingProduct.id ? editingProduct : p));
+    toast({
+        title: "Product Updated",
+        description: `${editingProduct.name} has been successfully updated.`,
+    });
+    setEditingProduct(null);
+  };
+  
+  const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (!editingProduct) return;
+    const { name, value } = e.target;
+    setEditingProduct({
+        ...editingProduct,
+        [name]: name === 'price' || name === 'stock' ? Number(value) : value,
+    });
+  };
+
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -135,14 +174,16 @@ export function AdminDashboard() {
             <CardDescription>Current stock levels for all products.</CardDescription>
           </CardHeader>
           <CardContent>
-             <div className="space-y-4 max-h-[300px] overflow-y-auto">
+             <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
                 {products.map(product => (
                     <div key={product.id} className="flex items-center">
                         <div className="flex-1 space-y-1">
                             <p className="text-sm font-medium leading-none">{product.name}</p>
-                            <p className="text-sm text-muted-foreground">{product.category}</p>
+                            <p className="text-sm text-muted-foreground">{product.stock} units</p>
                         </div>
-                        <div className="font-medium">{product.stock} units</div>
+                        <Button variant="ghost" size="icon" onClick={() => handleEditProduct(product)}>
+                            <Pencil className="h-4 w-4" />
+                        </Button>
                     </div>
                 ))}
             </div>
@@ -184,6 +225,40 @@ export function AdminDashboard() {
             </ResponsiveContainer>
           </CardContent>
         </Card>
+
+        {editingProduct && (
+            <Dialog open={!!editingProduct} onOpenChange={(isOpen) => !isOpen && setEditingProduct(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Product</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="name" className="text-right">Name</Label>
+                            <Input id="name" name="name" value={editingProduct.name} onChange={handleEditFormChange} className="col-span-3" />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="price" className="text-right">Price</Label>
+                            <Input id="price" name="price" type="number" value={editingProduct.price} onChange={handleEditFormChange} className="col-span-3" />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="stock" className="text-right">Stock</Label>
+                            <Input id="stock" name="stock" type="number" value={editingProduct.stock} onChange={handleEditFormChange} className="col-span-3" />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="description" className="text-right">Description</Label>
+                            <Textarea id="description" name="description" value={editingProduct.description} onChange={handleEditFormChange} className="col-span-3" />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button variant="outline">Cancel</Button>
+                        </DialogClose>
+                        <Button onClick={handleSaveProduct}>Save Changes</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        )}
     </div>
   );
 }

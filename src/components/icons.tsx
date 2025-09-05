@@ -13,6 +13,7 @@ export {
   LayoutDashboard,
   ShoppingBag,
   Users,
+  Pencil,
 } from 'lucide-react';
 
 export const TeQourtLogo = (props: SVGProps<SVGSVGElement>) => (
