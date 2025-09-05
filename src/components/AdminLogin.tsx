@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { Loader2 } from 'lucide-react';
 
 export function AdminLogin() {
   const router = useRouter();
@@ -14,20 +15,42 @@ export function AdminLogin() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = () => {
-    if (username === 'tqsr' && password === 'tqsr') {
-      try {
+  const handleLogin = async () => {
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (response.ok) {
         sessionStorage.setItem('tqsr-admin', JSON.stringify({ username: 'tqsr', isAuthenticated: true }));
         toast({ title: "Login Successful", description: "Welcome back!" });
         router.replace('/admin');
-      } catch (e) {
-        setError('An unexpected error occurred. Please try again.');
+      } else {
+        const data = await response.json();
+        setError(data.message || 'Invalid username or password.');
       }
-    } else {
-      setError('Invalid username or password.');
+    } catch (e) {
+      console.error('Login failed:', e);
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleLogin();
+    }
+  }
 
   return (
     <div className="container mx-auto flex min-h-[calc(100vh-200px)] items-center justify-center px-4 py-12">
@@ -43,7 +66,9 @@ export function AdminLogin() {
               id="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="tqsr"
+              onKeyDown={handleKeyPress}
+              placeholder="admin"
+              disabled={isLoading}
             />
           </div>
           <div className="space-y-2">
@@ -53,11 +78,14 @@ export function AdminLogin() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="tqsr"
+              onKeyDown={handleKeyPress}
+              placeholder="••••••••"
+              disabled={isLoading}
             />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button onClick={handleLogin} className="w-full">
+          <Button onClick={handleLogin} className="w-full" disabled={isLoading}>
+            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Login
           </Button>
         </CardContent>
