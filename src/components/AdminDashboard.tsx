@@ -47,7 +47,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
-import { orders as initialOrders } from '@/lib/orders';
 import { Pencil, PlusCircle, Trash2, Loader2 } from '@/components/icons';
 import { useState, useEffect } from 'react';
 import type { Product, Order } from '@/lib/types';
@@ -61,7 +60,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { db } from '@/lib/firebase';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 
 const revenueData = [
@@ -90,7 +89,7 @@ const emptyProduct: Omit<Product, 'id' | 'specifications'> & { images: string } 
 
 export function AdminDashboard() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [isNewProductDialogOpen, setIsNewProductDialogOpen] = useState(false);
@@ -120,6 +119,9 @@ export function AdminDashboard() {
 
   useEffect(() => {
     fetchProducts();
+    // In a real app, you would fetch orders from your database as well
+    // For this prototype, we'll keep using static order data
+    // fetchOrders(); 
   }, []);
 
   const totalRevenue = orders.reduce((acc, order) => acc + order.total, 0);
@@ -134,8 +136,9 @@ export function AdminDashboard() {
     if (!editingProduct) return;
     setIsLoading(true);
     try {
-      const productRef = doc(db, "products", editingProduct.id);
-      await updateDoc(productRef, { ...editingProduct });
+      const { id, ...productData } = editingProduct;
+      const productRef = doc(db, "products", id);
+      await updateDoc(productRef, productData);
       await fetchProducts(); // Refetch products to show updated data
       toast({
           title: "Product Updated",
@@ -181,8 +184,8 @@ export function AdminDashboard() {
         stock: Number(newProduct.stock),
         specifications: {}, // Simplified for now
       };
-      const docRef = await addDoc(collection(db, "products"), newProductData);
-      setProducts([{ id: docRef.id, ...newProductData }, ...products]);
+      await addDoc(collection(db, "products"), newProductData);
+      await fetchProducts();
       toast({
           title: "Product Added",
           description: `${newProduct.name} has been successfully added.`,
@@ -230,6 +233,7 @@ export function AdminDashboard() {
   
   const handleSaveOrder = () => {
     if (!editingOrder) return;
+    // In a real app, this would update the order in the database
     setOrders(orders.map(o => o.id === editingOrder.id ? editingOrder : o));
     toast({
         title: "Order Updated",
@@ -245,6 +249,7 @@ export function AdminDashboard() {
 
   const handleDeleteOrder = () => {
     if (!orderToDelete) return;
+    // In a real app, this would delete the order in the database
     setOrders(orders.filter(o => o.id !== orderToDelete));
     toast({
         title: "Order Deleted",
@@ -388,7 +393,7 @@ export function AdminDashboard() {
           <CardHeader>
             <CardTitle className='font-headline'>Revenue Overview</CardTitle>
             <CardDescription>A chart showing revenue over the last year.</CardDescription>
-          </CardHeader>
+          </Header>
           <CardContent className="pl-2">
              <ResponsiveContainer width="100%" height={350}>
               <BarChart data={revenueData}>
